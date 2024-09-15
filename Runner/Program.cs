@@ -9,11 +9,24 @@ using FileSync.Clients;
 using Microsoft.Extensions.Configuration;
 using FileSync.Configuration;
 using FileSync.Factories;
+using FileSync.Messages;
+using System.Collections.Generic;
 
 namespace Runner
 {
     class Program
     {
+        static void Sync(IList<FileNotificationMessage> messages, IActorRef router)
+        {
+            messages
+                .GroupBy(x => x.OldFullPath)
+                .Select(x => x.OrderByDescending(i => i.Timestamp)
+                .FirstOrDefault())
+                .Where(x => x != null)
+                .ToList()
+                .ForEach(x => router.Tell(x));
+        }
+
         static void Main(string[] args)
         {
             var configuration = new ConfigurationBuilder()
@@ -40,7 +53,7 @@ namespace Runner
 
                 var router = system.ActorOf(Props.Empty.WithRouter(new BroadcastGroup(actors.Select(t => t.Path.ToString()))), "filesync");
                 var fw = new FileWatcher(fileToWatch);
-                using (fw.Throttle(TimeSpan.FromSeconds(.5)).Subscribe(e => { Console.WriteLine(e.FullPath); router.Tell(e); }, ex => Console.WriteLine(ex.Message), () => Console.WriteLine("Completed")))
+                using (fw.Buffer(TimeSpan.FromSeconds(1), 4).Subscribe(e => Sync(e, router), ex => Console.WriteLine(ex.Message), () => Console.WriteLine("Completed")))
                 {
                     Console.WriteLine("Press q to finish ...");
                     string input;

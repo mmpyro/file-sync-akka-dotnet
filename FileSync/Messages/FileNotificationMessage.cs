@@ -7,5 +7,6 @@ namespace FileSync.Messages
         public string FullPath { get; set; }
         public string OldFullPath { get; set; }
         public FileModificationType ModificationType { get; set; }
+        public int Timestamp { get; set; }
     }
 }
