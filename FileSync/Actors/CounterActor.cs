@@ -2,13 +2,14 @@
 using FileSync.Messages;
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 
 namespace FileSync.Actors
 {
     public class CounterActor : ReceiveActor, IWithTimers
     {
-        private readonly HashSet<string> _set = new();
+        private readonly HashSet<string> _set = [];
 
         public CounterActor()
         {
@@ -16,8 +17,9 @@ namespace FileSync.Actors
             {
                if(msg.ToLower() == "count")
                 {
-                    Context.ActorSelection("/user/*").Tell(new CountMessageRequest());
-                    Timers.StartSingleTimer("counting-timer", new FinishCountingMessage(), TimeSpan.FromSeconds(.5));
+                    _set.Clear();
+                    Context.ActorSelection("/user/*/*").Tell(new CountMessageRequest());
+                    Timers.StartSingleTimer("counting-timer", new FinishCountingMessage(), TimeSpan.FromSeconds(1));
                 }
             });
 
@@ -28,7 +30,15 @@ namespace FileSync.Actors
 
             Receive<FinishCountingMessage>(_ =>
             {
-                Console.WriteLine($"Number of user Actors is: {_set.Count}");
+                var sb = new StringBuilder();
+                sb.AppendLine($"Number of user Actors is: {_set.Count}");
+                sb.AppendLine("-----------------------------");
+                foreach(var item in _set)
+                {
+                    sb.AppendLine(item);
+                }
+                sb.AppendLine("-----------------------------");
+                Console.WriteLine(sb.ToString());
                 _set.Clear();
             });
 

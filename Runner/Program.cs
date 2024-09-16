@@ -20,11 +20,9 @@ namespace Runner
         {
             messages
                 .GroupBy(x => x.OldFullPath)
-                .Select(x => x.OrderByDescending(i => i.Timestamp)
-                .FirstOrDefault())
-                .Where(x => x != null)
+                .Select(x => x.OrderByDescending(i => i.Timestamp).First())
                 .ToList()
-                .ForEach(x => router.Tell(x));
+                .ForEach(router.Tell);
         }
 
         static void Main(string[] args)
@@ -43,17 +41,17 @@ namespace Runner
             using (var system = ActorSystem.Create(systemName))
             {
                 var counter = system.ActorOf(CounterActor.Create());
-                //var router = system.ActorOf(FileSyncActor.Create(new BlobClient(blobConfig)).WithRouter(new RoundRobinPool(1, new DefaultResizer(1, 10))), "AzureBlob");
-
+                var azure = system.ActorOf(FileSyncActor.Create(new BlobClient(blobConfig)).WithRouter(new RoundRobinPool(3, new DefaultResizer(1, 10, messagesPerResize: 3))), "AzureBlob");
+                var aws = system.ActorOf(FileSyncActor.Create(new S3Client(new AmazonS3ClientFactory(), awsConfig)).WithRouter(new RoundRobinPool(3, new DefaultResizer(1, 10, messagesPerResize: 3))), "S3");
                 var actors = new[]
                 {
-                    system.ActorOf(FileSyncActor.Create(new S3Client(new AmazonS3ClientFactory(), awsConfig)), "S3"),
-                    system.ActorOf(FileSyncActor.Create(new BlobClient(blobConfig)), "AzureBlob")
+                    azure,
+                    aws
                 };
 
                 var router = system.ActorOf(Props.Empty.WithRouter(new BroadcastGroup(actors.Select(t => t.Path.ToString()))), "filesync");
                 var fw = new FileWatcher(fileToWatch);
-                using (fw.Buffer(TimeSpan.FromSeconds(1), 4).Subscribe(e => Sync(e, router), ex => Console.WriteLine(ex.Message), () => Console.WriteLine("Completed")))
+                using (fw.Buffer(TimeSpan.FromSeconds(2), 10).Subscribe(e => Sync(e, router), ex => Console.WriteLine(ex.Message), () => Console.WriteLine("Completed")))
                 {
                     Console.WriteLine("Press q to finish ...");
                     string input;

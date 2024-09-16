@@ -3,6 +3,7 @@ using FileSync.Clients;
 using FileSync.Enums;
 using FileSync.Messages;
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace FileSync.Actors
@@ -24,6 +25,18 @@ namespace FileSync.Actors
 
             public BlobSyncedStatus Status { get; private set; }
             public string FullPath { get; private set; }
+        }
+
+        protected override void PreStart()
+        {
+            base.PreStart();
+            Console.WriteLine($"Actor is starting {Self.Path}");
+        }
+
+        protected override void PostStop()
+        {
+            base.PostStop();
+            Console.WriteLine($"Actor is stoping {Self.Path}");
         }
 
         public FileSyncActor(IStorageClient client)
@@ -59,7 +72,7 @@ namespace FileSync.Actors
             {
                 Sender.Tell(new CountMessageResponse
                 {
-                    Id = Self.Path.Uid.ToString()
+                    Id = Self.Path.ToString()
                 });
             });
         }
