@@ -19,6 +19,8 @@ The application uses the Actor Model pattern with:
 - **CounterActor**: Tracks synchronization statistics
 - **Router**: Distributes work across multiple actor instances
 
+[![Alt text](diagram.png)](diagram.png)
+
 ## Prerequisites
 
 - .NET 8.0 SDK
