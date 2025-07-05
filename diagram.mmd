@@ -1,0 +1,62 @@
+sequenceDiagram
+    participant FileSystem as File System
+    participant FileWatcher as FileWatcher
+    participant Buffer as Buffer (Rx)
+    participant Router as BroadcastGroup Router
+    participant S3Actor as S3 FileSyncActor Pool
+    participant AzureActor as Azure FileSyncActor Pool
+    participant S3Client as S3Client
+    participant AzureClient as BlobClient
+    participant S3Storage as AWS S3
+    participant AzureStorage as Azure Blob Storage
+
+    Note over FileSystem,AzureStorage: File Sync Process Flow
+
+    FileSystem->>FileWatcher: File Event (Created/Changed/Deleted/Renamed)
+    FileWatcher->>FileWatcher: Create FileNotificationMessage
+    FileWatcher->>Buffer: OnNext(FileNotificationMessage)
+    
+    Note over Buffer: Buffer for 2 seconds or 10 files
+    
+    Buffer->>Router: Sync(List<FileNotificationMessage>)
+    Note over Router: Groups by OldFullPath, takes latest by timestamp
+    
+    Router->>S3Actor: Tell(FileNotificationMessage)
+    Router->>AzureActor: Tell(FileNotificationMessage)
+    
+    par S3 Sync
+        S3Actor->>S3Actor: Receive message, become Busy
+        S3Actor->>S3Client: UpdateFile(msg)
+        
+        alt Created/Changed
+            S3Client->>S3Storage: UploadFile(fullPath)
+        else Deleted
+            S3Client->>S3Storage: RemoveFile(fullPath)
+        else Renamed
+            S3Client->>S3Storage: RenameFile(oldPath, newPath)
+        end
+        
+        S3Storage-->>S3Client: Response
+        S3Client-->>S3Actor: Task Result
+        S3Actor->>S3Actor: Handle SyncMessage, become Ready
+        S3Actor->>S3Actor: Unstash queued messages
+        
+    and Azure Sync
+        AzureActor->>AzureActor: Receive message, become Busy
+        AzureActor->>AzureClient: UpdateFile(msg)
+        
+        alt Created/Changed
+            AzureClient->>AzureStorage: UploadFile(fullPath)
+        else Deleted
+            AzureClient->>AzureStorage: RemoveFile(fullPath)
+        else Renamed
+            AzureClient->>AzureStorage: RenameFile(oldPath, newPath)
+        end
+        
+        AzureStorage-->>AzureClient: Response
+        AzureClient-->>AzureActor: Task Result
+        AzureActor->>AzureActor: Handle SyncMessage, become Ready
+        AzureActor->>AzureActor: Unstash queued messages
+    end
+
+    Note over S3Actor,AzureActor: Actors use Round Robin Pool (3 instances each)<br/>with auto-scaling (1-10 instances)
